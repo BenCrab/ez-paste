@@ -1,0 +1,19 @@
+{
+  "": {
+    "dependencies": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/ScreenshotClipboard.d",
+    "object": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/ScreenshotClipboard.o",
+    "swift-dependencies": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/master.swiftdeps"
+  },
+  "/Users/ben/Documents/personal/current/ez-paste/Sources/ScreenshotClipboard/AppDelegate.swift": {
+    "object": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/AppDelegate.swift.o",
+    "swiftmodule": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/AppDelegate~partial.swiftmodule",
+    "swift-dependencies": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/AppDelegate.swiftdeps",
+    "diagnostics": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/AppDelegate.dia"
+  },
+  "/Users/ben/Documents/personal/current/ez-paste/Sources/ScreenshotClipboard/main.swift": {
+    "object": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/main.swift.o",
+    "swiftmodule": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/main.swiftdeps",
+    "diagnostics": "/Users/ben/Documents/personal/current/ez-paste/.build/arm64-apple-macosx/release/ScreenshotClipboard.build/main.dia"
+  }
+}
