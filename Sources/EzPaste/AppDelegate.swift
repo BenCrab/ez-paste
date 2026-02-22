@@ -1,172 +1,170 @@
 import AppKit
-import UserNotifications
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private var directoryWatcher: DirectoryWatcher?
-    private var knownFiles: Set<String> = []
-    private var screenshotDirectory: String = ""
+    private var toggleItem: NSMenuItem!
+    private let monitor = ClipboardMonitor()
+    private var isActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        requestNotificationPermission()
-        setupMenuBar()
-        setupWatcher()
-    }
-
-    // MARK: - Menu Bar
-
-    private func setupMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
             if let iconURL = Bundle.main.url(forResource: "ez-paste", withExtension: "png"),
                let icon = NSImage(contentsOf: iconURL) {
-                icon.size = NSSize(width: 20, height: 20)
+                icon.size = NSSize(width: 18, height: 18)
                 icon.isTemplate = true
                 button.image = icon
             } else {
-                button.image = NSImage(systemSymbolName: "camera.fill", accessibilityDescription: "ez-paste")
+                button.title = "EP"
             }
         }
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "ez-paste", action: nil, keyEquivalent: "")
-        menu.addItem(.separator())
 
-        let watchingItem = NSMenuItem(title: "Watching: ...", action: nil, keyEquivalent: "")
-        watchingItem.tag = 1
-        menu.addItem(watchingItem)
+        toggleItem = NSMenuItem(title: "Monitoring", action: #selector(toggle), keyEquivalent: "")
+        toggleItem.target = self
+        menu.addItem(toggleItem)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
+
+        let openFolderItem = NSMenuItem(title: "Open Screenshots Folder", action: #selector(openScreenshotsFolder), keyEquivalent: "")
+        openFolderItem.target = self
+        menu.addItem(openFolderItem)
+
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit EzPaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quitItem)
 
         statusItem.menu = menu
+
+        startMonitoring()
     }
 
-    @objc private func quit() {
-        NSApp.terminate(nil)
+    @objc private func toggle() {
+        if isActive { stopMonitoring() } else { startMonitoring() }
     }
 
-    // MARK: - File Watching
-
-    private func getScreenshotDirectory() -> String {
-        let custom = UserDefaults(suiteName: "com.apple.screencapture")?.string(forKey: "location")
-        let expanded = custom.map { NSString(string: $0).expandingTildeInPath }
-        return expanded ?? (NSHomeDirectory() + "/Desktop")
+    @objc private func openScreenshotsFolder() {
+        NSWorkspace.shared.open(monitor.screenshotDir)
     }
 
-    private func setupWatcher() {
-        screenshotDirectory = getScreenshotDirectory()
-
-        if let menu = statusItem.menu, let item = menu.item(withTag: 1) {
-            let shortPath = screenshotDirectory.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-            item.title = "Watching: \(shortPath)"
-        }
-
-        knownFiles = currentFiles()
-
-        directoryWatcher = DirectoryWatcher(path: screenshotDirectory) { [weak self] in
-            self?.checkForNewScreenshots()
-        }
+    private func startMonitoring() {
+        isActive = true
+        toggleItem.state = .on
+        monitor.start()
     }
 
-    private func currentFiles() -> Set<String> {
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: screenshotDirectory)) ?? []
-        return Set(files)
-    }
-
-    private func checkForNewScreenshots() {
-        let current = currentFiles()
-        let added = current.subtracting(knownFiles)
-        knownFiles = current
-
-        let screenshotPaths = added
-            .filter { name in
-                let lower = name.lowercased()
-                return lower.hasSuffix(".png") && (
-                    lower.hasPrefix("screenshot") ||
-                    lower.hasPrefix("screen shot")
-                )
-            }
-            .map { screenshotDirectory + "/" + $0 }
-            .sorted { a, b in
-                let aDate = (try? FileManager.default.attributesOfItem(atPath: a))?[.creationDate] as? Date ?? .distantPast
-                let bDate = (try? FileManager.default.attributesOfItem(atPath: b))?[.creationDate] as? Date ?? .distantPast
-                return aDate > bDate
-            }
-
-        guard let latestPath = screenshotPaths.first else { return }
-
-        // Small delay to ensure the file is fully written to disk
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.copyImageToClipboard(at: latestPath)
-        }
-    }
-
-    private func copyImageToClipboard(at path: String) {
-        guard let image = NSImage(contentsOfFile: path) else { return }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([image])
-
-        flashStatusIcon()
-        sendNotification()
-    }
-
-    // MARK: - Feedback
-
-    private func flashStatusIcon() {
-        guard let button = statusItem.button else { return }
-        let original = button.image
-        button.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            button.image = original
-        }
-    }
-
-    // MARK: - Notifications
-
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
-    }
-
-    private func sendNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = "Screenshot copied"
-        content.body = "Ready to paste into Claude Code"
-
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(request)
+    private func stopMonitoring() {
+        isActive = false
+        toggleItem.state = .off
+        monitor.stop()
     }
 }
 
-// MARK: - Directory Watcher
+// MARK: - Clipboard Monitor
 
-class DirectoryWatcher {
-    private var source: DispatchSourceFileSystemObject?
-    private let fd: Int32
+class ClipboardMonitor {
+    private var timer: Timer?
+    private var lastChangeCount: Int = 0
+    let screenshotDir: URL
 
-    init?(path: String, onChange: @escaping () -> Void) {
-        fd = open(path, O_EVTONLY)
-        guard fd >= 0 else { return nil }
+    var onSave: ((URL) -> Void)?
 
-        source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: .write,
-            queue: .main
-        )
-
-        source?.setEventHandler(handler: onChange)
-        source?.setCancelHandler { [fd] in close(fd) }
-        source?.resume()
+    init() {
+        let pictures = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Pictures")
+            .appendingPathComponent("ClipboardScreenshots")
+        screenshotDir = pictures
+        try? FileManager.default.createDirectory(at: screenshotDir, withIntermediateDirectories: true)
     }
 
-    deinit {
-        source?.cancel()
+    func start() {
+        lastChangeCount = NSPasteboard.general.changeCount
+        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            self?.poll()
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func poll() {
+        let pb = NSPasteboard.general
+        let current = pb.changeCount
+        guard current != lastChangeCount else { return }
+        lastChangeCount = current
+
+        let types = pb.types ?? []
+        let hasImage = types.contains(.tiff) || types.contains(.png)
+        let hasFileURL = types.contains(.fileURL)
+
+        if hasImage && !hasFileURL {
+            convertToFile()
+        }
+    }
+
+    private func convertToFile() {
+        let pb = NSPasteboard.general
+
+        guard let tiffData = pb.data(forType: .tiff),
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:])
+        else { return }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss-SSS"
+        let filename = "screenshot_\(formatter.string(from: Date())).png"
+        let fileURL = screenshotDir.appendingPathComponent(filename)
+
+        do {
+            try pngData.write(to: fileURL)
+        } catch {
+            NSLog("EzPaste: failed to save – \(error)")
+            return
+        }
+
+        writeFileToClipboard(fileURL: fileURL, tiffData: tiffData)
+
+        let url = fileURL
+        let tiff = tiffData
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.verifyAndRewrite(fileURL: url, tiffData: tiff)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.verifyAndRewrite(fileURL: url, tiffData: tiff)
+        }
+
+        NSLog("EzPaste: saved %@", fileURL.path)
+    }
+
+    private func writeFileToClipboard(fileURL: URL, tiffData: Data) {
+        let pb = NSPasteboard.general
+        let filenameType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+
+        pb.clearContents()
+        pb.declareTypes([.string, .fileURL, filenameType, .tiff], owner: nil)
+        pb.setString(fileURL.path, forType: .string)
+        pb.setString(fileURL.absoluteString, forType: .fileURL)
+        pb.setPropertyList([fileURL.path], forType: filenameType)
+        pb.setData(tiffData, forType: .tiff)
+
+        lastChangeCount = pb.changeCount
+        NSLog("EzPaste: wrote clipboard (changeCount=%d)", pb.changeCount)
+    }
+
+    private func verifyAndRewrite(fileURL: URL, tiffData: Data) {
+        let pb = NSPasteboard.general
+        let types = pb.types ?? []
+
+        if !types.contains(.fileURL) {
+            NSLog("EzPaste: clipboard was overwritten, rewriting")
+            writeFileToClipboard(fileURL: fileURL, tiffData: tiffData)
+        } else {
+            lastChangeCount = pb.changeCount
+        }
     }
 }

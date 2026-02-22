@@ -1,7 +1,8 @@
 import AppKit
 
-NSApp.setActivationPolicy(.accessory)
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
 
 let delegate = AppDelegate()
-NSApp.delegate = delegate
-NSApp.run()
+app.delegate = delegate
+app.run()

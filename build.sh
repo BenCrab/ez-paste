@@ -52,6 +52,7 @@ cat > "$CONTENTS/Info.plist" << EOF
 </plist>
 EOF
 
+
 echo ""
 echo "Built: $APP_BUNDLE"
 echo ""
