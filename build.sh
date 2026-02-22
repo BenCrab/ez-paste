@@ -22,9 +22,26 @@ mkdir -p "$MACOS"
 # Copy binary
 cp "$BINARY_PATH" "$MACOS/$APP_NAME"
 
+# Build .icns app icon
+ICONSET="$PROJECT_DIR/AppIcon.iconset"
+ICON_SRC="/Users/ben/Downloads/AppIconAssets_iOS_macOS_v4/icons"
+mkdir -p "$ICONSET"
+cp "$ICON_SRC/icon_16x16.png"     "$ICONSET/icon_16x16.png"
+cp "$ICON_SRC/icon_32x32.png"     "$ICONSET/icon_16x16@2x.png"
+cp "$ICON_SRC/icon_32x32.png"     "$ICONSET/icon_32x32.png"
+cp "$ICON_SRC/icon_64x64.png"     "$ICONSET/icon_32x32@2x.png"
+cp "$ICON_SRC/icon_128x128.png"   "$ICONSET/icon_128x128.png"
+cp "$ICON_SRC/icon_256x256.png"   "$ICONSET/icon_128x128@2x.png"
+cp "$ICON_SRC/icon_256x256.png"   "$ICONSET/icon_256x256.png"
+cp "$ICON_SRC/icon_512x512.png"   "$ICONSET/icon_256x256@2x.png"
+cp "$ICON_SRC/icon_512x512.png"   "$ICONSET/icon_512x512.png"
+cp "$ICON_SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png"
+
 # Copy resources
 mkdir -p "$CONTENTS/Resources"
 cp "$PROJECT_DIR/Resources/"* "$CONTENTS/Resources/"
+iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/AppIcon.icns"
+rm -rf "$ICONSET"
 
 # Create Info.plist
 cat > "$CONTENTS/Info.plist" << EOF
@@ -48,13 +65,19 @@ cat > "$CONTENTS/Info.plist" << EOF
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
 </dict>
 </plist>
 EOF
 
 
+# Create distributable zip
+ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$PROJECT_DIR/ez-paste.zip"
+
 echo ""
 echo "Built: $APP_BUNDLE"
+echo "Zip:   $PROJECT_DIR/ez-paste.zip"
 echo ""
 echo "To install, run:"
 echo "  cp -r \"$APP_BUNDLE\" /Applications/"
