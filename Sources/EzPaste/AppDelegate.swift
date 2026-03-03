@@ -1,8 +1,10 @@
 import AppKit
+import ServiceManagement
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var toggleItem: NSMenuItem!
+    private var loginItem: NSMenuItem!
     private let monitor = ClipboardMonitor()
     private var isActive = false
 
@@ -28,18 +30,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        menu.addItem(loginItem)
+
         let openFolderItem = NSMenuItem(title: "Open Screenshots Folder", action: #selector(openScreenshotsFolder), keyEquivalent: "")
         openFolderItem.target = self
         menu.addItem(openFolderItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit EzPaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit EZ Paste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
         statusItem.menu = menu
 
+        // Auto-register as login item on first launch
+        if SMAppService.mainApp.status != .enabled {
+            try? SMAppService.mainApp.register()
+            loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        }
+
         startMonitoring()
+    }
+
+    @objc private func toggleLoginItem() {
+        if SMAppService.mainApp.status == .enabled {
+            try? SMAppService.mainApp.unregister()
+        } else {
+            try? SMAppService.mainApp.register()
+        }
+        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
     }
 
     @objc private func toggle() {
