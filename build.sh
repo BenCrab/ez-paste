@@ -172,9 +172,12 @@ hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_FINAL"
 rm -f "$DMG_TEMP"
 rm -rf "$DMG_STAGING"
 
-# Also notarize the DMG if we have a signing identity
+# Sign and notarize the DMG if we have a signing identity
 if [ -n "$SIGNING_IDENTITY" ]; then
     echo ""
+    echo "Signing DMG..."
+    codesign --force --sign "$SIGNING_IDENTITY" "$DMG_FINAL"
+
     echo "Notarizing DMG..."
     xcrun notarytool submit "$DMG_FINAL" \
         --keychain-profile "ez-paste-notary" \
