@@ -6,6 +6,9 @@ APP_NAME="ez-paste"
 BINARY_NAME="EzPaste"
 BUNDLE_ID="com.ben.ez-paste"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+NOTARY_MODE="${NOTARY_MODE:-wait}" # wait|notify
+NOTARY_PROFILE="${NOTARY_PROFILE:-ez-paste-notary}"
+NOTARY_NOTIFY_SCRIPT="$PROJECT_DIR/scripts/notary-submit-and-notify.sh"
 
 # Signing identity — pass via env or argument, e.g.:
 #   SIGNING_IDENTITY="Developer ID Application: Ben (...)" ./build.sh
@@ -92,16 +95,20 @@ if [ -n "$SIGNING_IDENTITY" ]; then
 
     echo ""
     echo "Submitting for notarization..."
-    xcrun notarytool submit "$PROJECT_DIR/ez-paste.zip" \
-        --keychain-profile "ez-paste-notary" \
-        --wait
+    if [ "$NOTARY_MODE" = "notify" ]; then
+        "$NOTARY_NOTIFY_SCRIPT" "$PROJECT_DIR/ez-paste.zip" "$NOTARY_PROFILE" "ez-paste app notarization" "$APP_BUNDLE"
+    else
+        xcrun notarytool submit "$PROJECT_DIR/ez-paste.zip" \
+            --keychain-profile "$NOTARY_PROFILE" \
+            --wait
 
-    echo ""
-    echo "Stapling notarization ticket..."
-    xcrun stapler staple "$APP_BUNDLE"
+        echo ""
+        echo "Stapling notarization ticket..."
+        xcrun stapler staple "$APP_BUNDLE"
 
-    echo ""
-    echo "Notarized and stapled."
+        echo ""
+        echo "Notarized and stapled."
+    fi
 else
     echo ""
     echo "WARNING: No signing identity provided. Skipping code signing and notarization."
@@ -111,8 +118,6 @@ else
 fi
 
 # Create DMG with drag-to-Applications layout
-DMG_NAME="$APP_NAME-$VERSION"
-DMG_TEMP="$PROJECT_DIR/${DMG_NAME}-temp.dmg"
 DMG_FINAL="$PROJECT_DIR/${APP_NAME}.dmg"
 DMG_STAGING="$PROJECT_DIR/.dmg-staging"
 VOLUME_NAME="$APP_NAME $VERSION"
@@ -124,52 +129,19 @@ mkdir -p "$DMG_STAGING"
 cp -R "$APP_BUNDLE" "$DMG_STAGING/"
 ln -s /Applications "$DMG_STAGING/Applications"
 
-# Create a temporary read-write DMG
-rm -f "$DMG_TEMP"
+# Copy volume icon into staging
+cp "$CONTENTS/Resources/AppIcon.icns" "$DMG_STAGING/.VolumeIcon.icns"
+SetFile -c icnC "$DMG_STAGING/.VolumeIcon.icns"
+SetFile -a C "$DMG_STAGING"
+
+# Create compressed DMG directly
+rm -f "$DMG_FINAL"
 hdiutil create -srcfolder "$DMG_STAGING" \
     -volname "$VOLUME_NAME" \
     -fs HFS+ \
-    -format UDRW \
-    -size 200m \
-    "$DMG_TEMP"
-
-# Mount the DMG and configure Finder window layout
-MOUNT_DIR=$(hdiutil attach -readwrite -noverify "$DMG_TEMP" | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/')
-
-osascript <<APPLESCRIPT
-tell application "Finder"
-    tell disk "$VOLUME_NAME"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set bounds of container window to {100, 100, 640, 400}
-        set viewOptions to the icon view options of container window
-        set arrangement of viewOptions to not arranged
-        set icon size of viewOptions to 80
-        set position of item "$APP_NAME.app" of container window to {140, 150}
-        set position of item "Applications" of container window to {400, 150}
-        close
-        open
-        update without registering applications
-        delay 1
-        close
-    end tell
-end tell
-APPLESCRIPT
-
-# Set the DMG volume icon to the app icon
-cp "$CONTENTS/Resources/AppIcon.icns" "$MOUNT_DIR/.VolumeIcon.icns"
-SetFile -c icnC "$MOUNT_DIR/.VolumeIcon.icns"
-SetFile -a C "$MOUNT_DIR"
-
-sync
-hdiutil detach "$MOUNT_DIR"
-
-# Convert to compressed read-only DMG
-rm -f "$DMG_FINAL"
-hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_FINAL"
-rm -f "$DMG_TEMP"
+    -format UDZO \
+    -imagekey zlib-level=9 \
+    "$DMG_FINAL"
 rm -rf "$DMG_STAGING"
 
 # Sign and notarize the DMG if we have a signing identity
@@ -179,13 +151,20 @@ if [ -n "$SIGNING_IDENTITY" ]; then
     codesign --force --sign "$SIGNING_IDENTITY" "$DMG_FINAL"
 
     echo "Notarizing DMG..."
-    xcrun notarytool submit "$DMG_FINAL" \
-        --keychain-profile "ez-paste-notary" \
-        --wait
-    xcrun stapler staple "$DMG_FINAL"
-    echo "DMG notarized and stapled."
+    if [ "$NOTARY_MODE" = "notify" ]; then
+        "$NOTARY_NOTIFY_SCRIPT" "$DMG_FINAL" "$NOTARY_PROFILE" "ez-paste dmg notarization" "$DMG_FINAL"
+    else
+        xcrun notarytool submit "$DMG_FINAL" \
+            --keychain-profile "$NOTARY_PROFILE" \
+            --wait
+        xcrun stapler staple "$DMG_FINAL"
+        echo "DMG notarized and stapled."
+    fi
 fi
 
 echo ""
 echo "Built: $APP_BUNDLE (v$VERSION)"
 echo "DMG:   $DMG_FINAL"
+if [ "$NOTARY_MODE" = "notify" ]; then
+    echo "Notary: submitted in background (notifications enabled)."
+fi
